@@ -68,7 +68,7 @@ export default function Sidebar({ currentPage, onPageChange, onContactClick }: S
         } lg:translate-x-0 lg:static flex flex-col`}
       >
         <div className="p-6 border-b border-gray-200">
-          <h1 className="text-2xl font-bold text-blue-600">DairyDash</h1>
+          <h1 className="text-2xl font-bold text-blue-600">Jai Durga Bhavani Milk Center</h1>
           <p className="text-xs text-gray-500 mt-1">
             {user?.role === 'admin' ? 'Admin Panel' : 'Customer Portal'}
           </p>
@@ -112,7 +112,7 @@ export default function Sidebar({ currentPage, onPageChange, onContactClick }: S
           </button>
 
           <a
-            href="https://wa.me/919921491249?text=Hello%2C%20I%20need%20help%20with%20DairyDash."
+            href="https://wa.me/919059516633?text=Hello%2C%20I%20need%20help%20with%20Jai%20Durga%20Bhavani%20Milk%20Center."
             target="_blank"
             rel="noopener noreferrer"
             className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"

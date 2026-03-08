@@ -42,6 +42,8 @@ export interface Customer {
   floor: string;
   flat_no: string;
   address: string;
+  delivery_option?: 'Daily' | 'Alternate Days' | 'Weekly' | 'Custom';
+  custom_delivery_notes?: string | null;
   status: 'active' | 'paused';
   created_at: string;
   subscription?: Subscription;

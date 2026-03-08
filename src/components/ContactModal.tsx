@@ -28,7 +28,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
               <Phone className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-gray-600">Phone</p>
-                <p className="text-lg font-semibold text-gray-900">+91 9921491249</p>
+                <p className="text-lg font-semibold text-gray-900">+91 9059516633</p>
               </div>
             </div>
 
@@ -36,7 +36,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
               <Mail className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-gray-600">Email</p>
-                <p className="text-lg font-semibold text-gray-900">support@dairydash.com</p>
+                <p className="text-lg font-semibold text-gray-900">support@jaidurgabhavanimilkcenter.com</p>
               </div>
             </div>
 
@@ -51,7 +51,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
 
           <div className="flex gap-3">
             <a
-              href="tel:+919921491249"
+              href="tel:+919059516633"
               className="flex-1"
             >
               <Button className="w-full" onClick={onClose}>
@@ -60,7 +60,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
               </Button>
             </a>
             <a
-              href="https://wa.me/919921491249?text=Hello%2C%20I%20need%20help%20with%20DairyDash."
+              href="https://wa.me/919059516633?text=Hello%2C%20I%20need%20help%20with%20Jai%20Durga%20Bhavani%20Milk%20Center."
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1"

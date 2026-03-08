@@ -15,9 +15,11 @@ interface Customer {
   block: string;
   floor: string;
   flat_no: string;
+  address: string;
   milk_type: string;
   default_quantity: number;
   subscription_type: string;
+  custom_delivery_notes: string;
   status: string;
 }
 
@@ -27,15 +29,7 @@ interface Apartment {
 }
 
 export default function Customers() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [apartments, setApartments] = useState<Apartment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterApartment, setFilterApartment] = useState('');
-
-  const [formData, setFormData] = useState({
+  const initialFormData = {
     name: '',
     phone: '',
     apartment_id: '',
@@ -46,7 +40,20 @@ export default function Customers() {
     milk_type: 'Regular',
     default_quantity: 1,
     subscription_type: 'Daily',
-  });
+    custom_delivery_notes: '',
+  };
+
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [apartments, setApartments] = useState<Apartment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterApartment, setFilterApartment] = useState('');
+  const [formError, setFormError] = useState('');
+
+  const [formData, setFormData] = useState(initialFormData);
 
   useEffect(() => {
     fetchApartments();
@@ -70,13 +77,40 @@ export default function Customers() {
 
   const fetchCustomers = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: customersData, error: customersError } = await supabase
         .from('customers')
-        .select('*')
+        .select(
+          'id, name, phone, apartment_id, block, floor, flat_no, address, status, delivery_option, custom_delivery_notes'
+        )
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setCustomers(data || []);
+      if (customersError) throw customersError;
+
+      const { data: subscriptionsData, error: subscriptionsError } = await supabase
+        .from('subscriptions')
+        .select('customer_id, milk_type, default_qty');
+
+      if (subscriptionsError) throw subscriptionsError;
+
+      const subscriptionByCustomer = new Map(
+        (subscriptionsData || []).map((subscription) => [
+          subscription.customer_id,
+          subscription,
+        ])
+      );
+
+      const mergedCustomers: Customer[] = (customersData || []).map((customer) => {
+        const subscription = subscriptionByCustomer.get(customer.id);
+        return {
+          ...customer,
+          milk_type: subscription?.milk_type || 'Regular',
+          default_quantity: Number(subscription?.default_qty) || 1,
+          subscription_type: customer.delivery_option || 'Daily',
+          custom_delivery_notes: customer.custom_delivery_notes || '',
+        };
+      });
+
+      setCustomers(mergedCustomers);
     } catch (error) {
       console.error('Error fetching customers:', error);
     } finally {
@@ -84,41 +118,144 @@ export default function Customers() {
     }
   };
 
+  const resetForm = () => {
+    setFormData(initialFormData);
+    setFormError('');
+  };
+
+  const getErrorMessage = (error: unknown) => {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: string }).code === '23505'
+    ) {
+      return 'A customer with this phone number already exists.';
+    }
+
+    if (
+      error &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof (error as { message?: string }).message === 'string'
+    ) {
+      return (error as { message: string }).message;
+    }
+
+    return 'Unable to save customer. Please try again.';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+
+    const trimmedName = formData.name.trim();
+    const normalizedPhone = formData.phone.trim().replace(/\s+/g, '');
+    const normalizedQuantity = Number(formData.default_quantity);
+
+    if (!trimmedName) {
+      setFormError('Name is required.');
+      return;
+    }
+
+    if (!/^\d{10}$/.test(normalizedPhone)) {
+      setFormError('Phone number must be 10 digits.');
+      return;
+    }
+
+    if (!formData.apartment_id) {
+      setFormError('Please select an apartment.');
+      return;
+    }
+
+    if (!Number.isInteger(normalizedQuantity) || normalizedQuantity < 1) {
+      setFormError('Default quantity must be at least 1 liter.');
+      return;
+    }
+
+    if (formData.subscription_type === 'Custom' && !formData.custom_delivery_notes.trim()) {
+      setFormError('Please add custom delivery notes or frequency details.');
+      return;
+    }
+
+    setSaving(true);
+
+    const customerPayload = {
+      name: trimmedName,
+      phone: normalizedPhone,
+      apartment_id: formData.apartment_id,
+      block: formData.block.trim(),
+      floor: formData.floor.trim(),
+      flat_no: formData.flat_no.trim(),
+      address: formData.address.trim(),
+      delivery_option: formData.subscription_type,
+      custom_delivery_notes:
+        formData.subscription_type === 'Custom'
+          ? formData.custom_delivery_notes.trim()
+          : null,
+      status: 'active',
+    };
 
     try {
       if (editingCustomer) {
         const { error } = await supabase
           .from('customers')
-          .update(formData)
+          .update(customerPayload)
           .eq('id', editingCustomer.id);
 
         if (error) throw error;
+
+        const { error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .upsert(
+            {
+              customer_id: editingCustomer.id,
+              milk_type: formData.milk_type,
+              default_qty: normalizedQuantity,
+              is_active: true,
+            },
+            { onConflict: 'customer_id' }
+          );
+
+        if (subscriptionError) throw subscriptionError;
       } else {
-        const { error } = await supabase.from('customers').insert([formData]);
+        const { data: insertedCustomer, error } = await supabase
+          .from('customers')
+          .insert([customerPayload])
+          .select('id')
+          .single();
 
         if (error) throw error;
+        if (!insertedCustomer?.id) {
+          throw new Error('Customer created but failed to fetch created record.');
+        }
+
+        const { error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .insert([
+            {
+              customer_id: insertedCustomer.id,
+              milk_type: formData.milk_type,
+              default_qty: normalizedQuantity,
+              is_active: true,
+            },
+          ]);
+
+        if (subscriptionError) {
+          await supabase.from('customers').delete().eq('id', insertedCustomer.id);
+          throw subscriptionError;
+        }
       }
 
       setIsModalOpen(false);
-      setFormData({
-        name: '',
-        phone: '',
-        apartment_id: '',
-        block: '',
-        floor: '',
-        flat_no: '',
-        address: '',
-        milk_type: 'Regular',
-        default_quantity: 1,
-        subscription_type: 'Daily',
-      });
+      resetForm();
       setEditingCustomer(null);
-      fetchCustomers();
+      await fetchCustomers();
     } catch (error) {
       console.error('Error saving customer:', error);
-      alert('Error saving customer. Please try again.');
+      setFormError(getErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -131,11 +268,13 @@ export default function Customers() {
       block: customer.block,
       floor: customer.floor,
       flat_no: customer.flat_no,
-      address: '',
+      address: customer.address || '',
       milk_type: customer.milk_type,
       default_quantity: customer.default_quantity,
       subscription_type: customer.subscription_type,
+      custom_delivery_notes: customer.custom_delivery_notes || '',
     });
+    setFormError('');
     setIsModalOpen(true);
   };
 
@@ -222,18 +361,7 @@ export default function Customers() {
         <Button
           onClick={() => {
             setEditingCustomer(null);
-            setFormData({
-              name: '',
-              phone: '',
-              apartment_id: '',
-              block: '',
-              floor: '',
-              flat_no: '',
-              address: '',
-              milk_type: 'Regular',
-              default_quantity: 1,
-              subscription_type: 'Daily',
-            });
+            resetForm();
             setIsModalOpen(true);
           }}
         >
@@ -282,10 +410,16 @@ export default function Customers() {
         onClose={() => {
           setIsModalOpen(false);
           setEditingCustomer(null);
+          setFormError('');
         }}
         title={editingCustomer ? 'Edit Customer' : 'Add Customer'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
+          {formError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formError}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Name"
@@ -352,7 +486,10 @@ export default function Customers() {
               min="1"
               value={formData.default_quantity}
               onChange={(e) =>
-                setFormData({ ...formData, default_quantity: parseInt(e.target.value) })
+                setFormData({
+                  ...formData,
+                  default_quantity: parseInt(e.target.value, 10) || 0,
+                })
               }
               required
             />
@@ -364,24 +501,51 @@ export default function Customers() {
               { value: 'Daily', label: 'Daily' },
               { value: 'Alternate Days', label: 'Alternate Days' },
               { value: 'Weekly', label: 'Weekly' },
+              { value: 'Custom', label: 'Custom' },
             ]}
             value={formData.subscription_type}
-            onChange={(e) => setFormData({ ...formData, subscription_type: e.target.value })}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                subscription_type: e.target.value,
+                custom_delivery_notes:
+                  e.target.value === 'Custom' ? formData.custom_delivery_notes : '',
+              })
+            }
           />
+
+          {formData.subscription_type === 'Custom' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Custom Delivery Notes / Frequency Details
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Example: Deliver only Mon, Wed, Fri. Pause during travel dates."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={formData.custom_delivery_notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, custom_delivery_notes: e.target.value })
+                }
+              />
+            </div>
+          )}
 
           <div className="flex gap-3 justify-end pt-4">
             <Button
               type="button"
               variant="secondary"
+              disabled={saving}
               onClick={() => {
                 setIsModalOpen(false);
                 setEditingCustomer(null);
+                setFormError('');
               }}
             >
               Cancel
             </Button>
-            <Button type="submit">
-              {editingCustomer ? 'Update' : 'Save'}
+            <Button type="submit" disabled={saving}>
+              {saving ? 'Saving...' : editingCustomer ? 'Update' : 'Save'}
             </Button>
           </div>
         </form>

@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (email === 'admin' && password === 'admin123') {
         loginUser = {
           id: 'admin_user_1',
-          email: 'admin@dairydash.com',
+          email: 'admin@jaidurgabhavanimilkcenter.com',
           role: 'admin',
           created_at: new Date().toISOString(),
         };

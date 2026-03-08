@@ -29,7 +29,7 @@ export default function Login() {
             <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
               <LogIn className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">DairyDash</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Jai Durga Bhavani Milk Center</h1>
           </div>
 
           <h2 className="text-2xl font-semibold text-gray-900 mb-2 text-center">

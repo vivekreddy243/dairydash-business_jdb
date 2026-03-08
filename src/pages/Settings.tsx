@@ -5,11 +5,13 @@ import Button from '../components/Button';
 import { Input } from '../components/Input';
 import { supabase } from '../lib/supabase';
 
+const COMPANY_NAME = 'Jai Durga Bhavani Milk Center';
+
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
-    company_name: 'DairyDash',
+    company_name: COMPANY_NAME,
     default_milk_price: 50,
     tax_rate: 0,
   });
@@ -25,7 +27,7 @@ export default function Settings() {
       if (error) throw error;
       if (data) {
         setFormData({
-          company_name: data.company_name,
+          company_name: COMPANY_NAME,
           default_milk_price: Number(data.default_milk_price),
           tax_rate: Number(data.tax_rate),
         });
@@ -40,6 +42,7 @@ export default function Settings() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    const payload = { ...formData, company_name: COMPANY_NAME };
 
     try {
       const { data: existing } = await supabase
@@ -50,12 +53,12 @@ export default function Settings() {
       if (existing) {
         const { error } = await supabase
           .from('settings')
-          .update(formData)
+          .update(payload)
           .eq('id', existing.id);
 
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('settings').insert([formData]);
+        const { error } = await supabase.from('settings').insert([payload]);
 
         if (error) throw error;
       }
@@ -92,10 +95,8 @@ export default function Settings() {
             </h4>
             <Input
               label="Company Name"
-              value={formData.company_name}
-              onChange={(e) =>
-                setFormData({ ...formData, company_name: e.target.value })
-              }
+              value={COMPANY_NAME}
+              disabled
               required
             />
           </div>

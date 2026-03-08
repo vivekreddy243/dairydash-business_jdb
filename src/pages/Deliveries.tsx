@@ -8,12 +8,14 @@ interface Customer {
   id: string;
   name: string;
   flat_no: string;
+  apartment_id: string;
   milk_type: string;
   default_quantity: number;
 }
 
 interface Delivery {
   customer_id: string;
+  delivery_date: string;
   quantity: number;
   status: string;
 }
@@ -32,6 +34,19 @@ export default function Deliveries() {
     new Date().toISOString().split('T')[0]
   );
   const [filterApartment, setFilterApartment] = useState('');
+  const [fetchError, setFetchError] = useState('');
+
+  const getErrorMessage = (error: unknown) => {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof (error as { message?: string }).message === 'string'
+    ) {
+      return (error as { message: string }).message;
+    }
+    return 'Something went wrong. Please try again.';
+  };
 
   useEffect(() => {
     fetchApartments();
@@ -59,10 +74,13 @@ export default function Deliveries() {
   };
 
   const fetchCustomersAndDeliveries = async () => {
+    setLoading(true);
+    setFetchError('');
+
     try {
       let query = supabase
         .from('customers')
-        .select('id, name, flat_no, milk_type, default_quantity')
+        .select('id, name, flat_no, apartment_id')
         .eq('status', 'active');
 
       if (filterApartment) {
@@ -73,36 +91,72 @@ export default function Deliveries() {
 
       if (customersError) throw customersError;
 
+      const customerIds = (customersData || []).map((customer) => customer.id);
+      let subscriptionsData:
+        | Array<{ customer_id: string; milk_type: string; default_qty: number }>
+        | null = [];
+
+      if (customerIds.length > 0) {
+        const { data, error: subscriptionsError } = await supabase
+          .from('subscriptions')
+          .select('customer_id, milk_type, default_qty')
+          .in('customer_id', customerIds);
+
+        if (subscriptionsError) throw subscriptionsError;
+        subscriptionsData = data;
+      }
+
       const { data: deliveriesData, error: deliveriesError } = await supabase
         .from('deliveries')
-        .select('customer_id, quantity, status')
+        .select('customer_id, quantity, status, delivery_date')
         .eq('delivery_date', selectedDate);
 
       if (deliveriesError) throw deliveriesError;
+
+      const subscriptionByCustomerId = new Map(
+        (subscriptionsData || []).map((subscription) => [
+          subscription.customer_id,
+          subscription,
+        ])
+      );
+
+      const normalizedCustomers: Customer[] = (customersData || []).map((customer) => {
+        const subscription = subscriptionByCustomerId.get(customer.id);
+        return {
+          ...customer,
+          milk_type: subscription?.milk_type || 'Regular',
+          default_quantity: Number(subscription?.default_qty) || 1,
+        };
+      });
 
       const deliveriesMap: Record<string, Delivery> = {};
       deliveriesData?.forEach((d) => {
         deliveriesMap[d.customer_id] = {
           customer_id: d.customer_id,
+          delivery_date: d.delivery_date,
           quantity: d.quantity,
           status: d.status,
         };
       });
 
-      customersData?.forEach((c) => {
+      normalizedCustomers.forEach((c) => {
         if (!deliveriesMap[c.id]) {
           deliveriesMap[c.id] = {
             customer_id: c.id,
+            delivery_date: selectedDate,
             quantity: c.default_quantity,
             status: 'pending',
           };
         }
       });
 
-      setCustomers(customersData || []);
+      setCustomers(normalizedCustomers);
       setDeliveries(deliveriesMap);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setCustomers([]);
+      setDeliveries({});
+      setFetchError(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -132,6 +186,10 @@ export default function Deliveries() {
   const handleSave = async (customerId: string) => {
     try {
       const delivery = deliveries[customerId];
+      if (!delivery) {
+        throw new Error('No delivery data available for this customer.');
+      }
+
       const { data: existing } = await supabase
         .from('deliveries')
         .select('id')
@@ -143,6 +201,7 @@ export default function Deliveries() {
         const { error } = await supabase
           .from('deliveries')
           .update({
+            delivery_date: selectedDate,
             quantity: delivery.quantity,
             status: delivery.status,
           })
@@ -165,7 +224,7 @@ export default function Deliveries() {
       alert('Delivery saved successfully!');
     } catch (error) {
       console.error('Error saving delivery:', error);
-      alert('Error saving delivery. Please try again.');
+      alert(getErrorMessage(error));
     }
   };
 
@@ -191,10 +250,17 @@ export default function Deliveries() {
         })
       );
 
+      if (deliveryRecords.length === 0) {
+        alert('No delivery records available to save.');
+        return;
+      }
+
+      const customerIds = deliveryRecords.map((record) => record.customer_id);
       const { error: deleteError } = await supabase
         .from('deliveries')
         .delete()
-        .eq('delivery_date', selectedDate);
+        .eq('delivery_date', selectedDate)
+        .in('customer_id', customerIds);
 
       if (deleteError) throw deleteError;
 
@@ -208,7 +274,7 @@ export default function Deliveries() {
       fetchCustomersAndDeliveries();
     } catch (error) {
       console.error('Error saving all deliveries:', error);
-      alert('Error saving deliveries. Please try again.');
+      alert(getErrorMessage(error));
     }
   };
 
@@ -256,6 +322,8 @@ export default function Deliveries() {
       <Card>
         {loading ? (
           <div className="p-8 text-center text-gray-500">Loading...</div>
+        ) : fetchError ? (
+          <div className="p-8 text-center text-red-600">{fetchError}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -274,6 +342,9 @@ export default function Deliveries() {
                     Quantity (L)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Delivery Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -285,10 +356,10 @@ export default function Deliveries() {
                 {customers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-6 py-8 text-center text-gray-500"
                     >
-                      No customers found
+                      No deliveries found for the selected date and apartment.
                     </td>
                   </tr>
                 ) : (
@@ -318,6 +389,9 @@ export default function Deliveries() {
                               )
                             }
                           />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {new Date(delivery?.delivery_date || selectedDate).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
