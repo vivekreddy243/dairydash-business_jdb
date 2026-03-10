@@ -135,7 +135,7 @@ export default function Deliveries() {
         const subscription = subscriptionByCustomerId.get(customer.id);
         return {
           ...customer,
-          milk_type: subscription?.milk_type || 'Regular',
+          milk_type: subscription?.milk_type || 'cow_milk',
           default_quantity: Number(subscription?.default_qty) || 1,
         };
       });

@@ -37,7 +37,7 @@ export default function Customers() {
     floor: '',
     flat_no: '',
     address: '',
-    milk_type: 'Regular',
+    milk_type: 'cow_milk',
     default_quantity: 1,
     subscription_type: 'Daily',
     custom_delivery_notes: '',
@@ -141,7 +141,7 @@ export default function Customers() {
         const subscription = subscriptionByCustomer.get(customer.id);
         return {
           ...customer,
-          milk_type: subscription?.milk_type || 'Regular',
+          milk_type: subscription?.milk_type || 'cow_milk',
           default_quantity: Number(subscription?.default_qty) || 1,
           subscription_type: customer.delivery_option || 'Daily',
           custom_delivery_notes: customer.custom_delivery_notes || '',
@@ -536,9 +536,9 @@ export default function Customers() {
             <Select
               label="Milk Type"
               options={[
-                { value: 'Regular', label: 'Regular' },
-                { value: 'Toned', label: 'Toned' },
-                { value: 'Full Cream', label: 'Full Cream' },
+                { value: 'buffalo_milk', label: 'buffalo_milk' },
+                { value: 'curd', label: 'curd' },
+                { value: 'cow_milk', label: 'cow_milk' },
               ]}
               value={formData.milk_type}
               onChange={(e) => setFormData({ ...formData, milk_type: e.target.value })}

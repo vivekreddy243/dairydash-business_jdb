@@ -10,6 +10,7 @@ const COMPANY_NAME = 'Jai Durga Bhavani Milk Center';
 export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
   const [formData, setFormData] = useState({
     company_name: COMPANY_NAME,
     default_milk_price: 50,
@@ -22,12 +23,17 @@ export default function Settings() {
 
   const fetchSettings = async () => {
     try {
-      const { data, error } = await supabase.from('settings').select('*').maybeSingle();
+      const { data, error } = await supabase
+        .from('settings')
+        .select('id, company_name, default_milk_price, tax_rate')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
       if (error) throw error;
       if (data) {
         setFormData({
-          company_name: COMPANY_NAME,
+          company_name: data.company_name || COMPANY_NAME,
           default_milk_price: Number(data.default_milk_price),
           tax_rate: Number(data.tax_rate),
         });
@@ -41,6 +47,18 @@ export default function Settings() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+
+    if (!Number.isFinite(formData.default_milk_price) || formData.default_milk_price < 0) {
+      setFormError('Default milk price must be 0 or greater.');
+      return;
+    }
+
+    if (!Number.isFinite(formData.tax_rate) || formData.tax_rate < 0 || formData.tax_rate > 100) {
+      setFormError('Tax rate must be between 0 and 100.');
+      return;
+    }
+
     setSaving(true);
     const payload = { ...formData, company_name: COMPANY_NAME };
 
@@ -48,6 +66,8 @@ export default function Settings() {
       const { data: existing } = await supabase
         .from('settings')
         .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle();
 
       if (existing) {
@@ -66,7 +86,11 @@ export default function Settings() {
       alert('Settings saved successfully!');
     } catch (error) {
       console.error('Error saving settings:', error);
-      alert('Error saving settings. Please try again.');
+      setFormError(
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message?: string }).message || 'Error saving settings. Please try again.')
+          : 'Error saving settings. Please try again.'
+      );
     } finally {
       setSaving(false);
     }
@@ -89,6 +113,11 @@ export default function Settings() {
 
       <form onSubmit={handleSubmit}>
         <Card className="p-6 space-y-6">
+          {formError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formError}
+            </div>
+          )}
           <div>
             <h4 className="text-md font-semibold text-gray-900 mb-4">
               Company Details
