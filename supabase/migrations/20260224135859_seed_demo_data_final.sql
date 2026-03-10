@@ -43,7 +43,7 @@ ON CONFLICT (phone) DO NOTHING;
 
 -- Insert subscriptions
 INSERT INTO subscriptions (customer_id, milk_type, default_qty, price_per_liter, is_active)
-SELECT id, 'Regular', 2, 50, true FROM customers c
+SELECT id, 'cow_milk', 2, 50, true FROM customers c
 WHERE NOT EXISTS (SELECT 1 FROM subscriptions WHERE customer_id = c.id);
 
 -- Insert demo deliveries
