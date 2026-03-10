@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Save } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Printer, Save } from 'lucide-react';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import { supabase } from '../lib/supabase';
@@ -35,6 +35,17 @@ export default function Deliveries() {
   );
   const [filterApartment, setFilterApartment] = useState('');
   const [fetchError, setFetchError] = useState('');
+
+  const selectedApartmentName = useMemo(() => {
+    if (!filterApartment) {
+      return 'All Apartments';
+    }
+
+    return (
+      apartments.find((apartment) => apartment.id === filterApartment)?.name ||
+      'Selected Apartment'
+    );
+  }, [apartments, filterApartment]);
 
   const getErrorMessage = (error: unknown) => {
     if (
@@ -162,6 +173,13 @@ export default function Deliveries() {
     }
   };
 
+  const formatDisplayDate = (date: string) =>
+    new Date(date).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
   const handleQuantityChange = (customerId: string, quantity: number) => {
     setDeliveries((prev) => ({
       ...prev,
@@ -278,14 +296,22 @@ export default function Deliveries() {
     }
   };
 
+  const handlePrintDeliveries = () => {
+    window.print();
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 deliveries-print-root">
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Deliveries</h3>
           <p className="text-sm text-gray-500">Manage daily deliveries</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 print:hidden">
+          <Button variant="secondary" onClick={handlePrintDeliveries}>
+            <Printer className="w-4 h-4 mr-2" />
+            Print / Save PDF
+          </Button>
           <Button variant="secondary" onClick={handleMarkAllDelivered}>
             Mark All Delivered
           </Button>
@@ -296,7 +322,7 @@ export default function Deliveries() {
         </div>
       </div>
 
-      <Card className="p-4">
+      <Card className="p-4 print:hidden">
         <div className="flex gap-4">
           <input
             type="date"
@@ -319,7 +345,7 @@ export default function Deliveries() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="print:hidden">
         {loading ? (
           <div className="p-8 text-center text-gray-500">Loading...</div>
         ) : fetchError ? (
@@ -391,7 +417,7 @@ export default function Deliveries() {
                           />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(delivery?.delivery_date || selectedDate).toLocaleDateString()}
+                          {formatDisplayDate(delivery?.delivery_date || selectedDate)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
@@ -424,6 +450,74 @@ export default function Deliveries() {
           </div>
         )}
       </Card>
+
+      <div className="hidden print:block">
+        <div className="deliveries-print-sheet">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">Delivery List</h1>
+            <div className="mt-2 text-sm text-gray-600 space-y-1">
+              <p>
+                <span className="font-semibold text-gray-900">Date:</span>{' '}
+                {formatDisplayDate(selectedDate)}
+              </p>
+              <p>
+                <span className="font-semibold text-gray-900">Apartment:</span>{' '}
+                {selectedApartmentName}
+              </p>
+              <p>
+                <span className="font-semibold text-gray-900">Total Deliveries:</span>{' '}
+                {customers.length}
+              </p>
+            </div>
+          </div>
+
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="border border-gray-300 px-3 py-2 text-left">Customer Name</th>
+                <th className="border border-gray-300 px-3 py-2 text-left">Flat No</th>
+                <th className="border border-gray-300 px-3 py-2 text-left">Milk Type</th>
+                <th className="border border-gray-300 px-3 py-2 text-left">Quantity (L)</th>
+                <th className="border border-gray-300 px-3 py-2 text-left">Delivery Date</th>
+                <th className="border border-gray-300 px-3 py-2 text-left">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="border border-gray-300 px-3 py-6 text-center text-gray-500"
+                  >
+                    No deliveries found for the selected date and apartment.
+                  </td>
+                </tr>
+              ) : (
+                customers.map((customer) => {
+                  const delivery = deliveries[customer.id];
+
+                  return (
+                    <tr key={`print-${customer.id}`}>
+                      <td className="border border-gray-300 px-3 py-2">{customer.name}</td>
+                      <td className="border border-gray-300 px-3 py-2">{customer.flat_no}</td>
+                      <td className="border border-gray-300 px-3 py-2">{customer.milk_type}</td>
+                      <td className="border border-gray-300 px-3 py-2">
+                        {delivery?.quantity || 0}
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2">
+                        {formatDisplayDate(delivery?.delivery_date || selectedDate)}
+                      </td>
+                      <td className="border border-gray-300 px-3 py-2 uppercase">
+                        {delivery?.status || 'pending'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

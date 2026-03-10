@@ -52,6 +52,7 @@ export default function Customers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterApartment, setFilterApartment] = useState('');
   const [formError, setFormError] = useState('');
+  const [supportsDeliveryOptions, setSupportsDeliveryOptions] = useState(true);
 
   const [formData, setFormData] = useState(initialFormData);
 
@@ -77,14 +78,51 @@ export default function Customers() {
 
   const fetchCustomers = async () => {
     try {
-      const { data: customersData, error: customersError } = await supabase
+      let customersData:
+        | Array<{
+            id: string;
+            name: string;
+            phone: string;
+            apartment_id: string;
+            block: string;
+            floor: string;
+            flat_no: string;
+            address: string;
+            status: string;
+            delivery_option?: string | null;
+            custom_delivery_notes?: string | null;
+          }>
+        | null = null;
+
+      const customerQueryWithDeliveryOptions = await supabase
         .from('customers')
         .select(
           'id, name, phone, apartment_id, block, floor, flat_no, address, status, delivery_option, custom_delivery_notes'
         )
         .order('created_at', { ascending: false });
 
-      if (customersError) throw customersError;
+      if (customerQueryWithDeliveryOptions.error) {
+        const missingDeliveryOptionColumns =
+          customerQueryWithDeliveryOptions.error.message.includes('delivery_option') ||
+          customerQueryWithDeliveryOptions.error.message.includes('custom_delivery_notes');
+
+        if (!missingDeliveryOptionColumns) {
+          throw customerQueryWithDeliveryOptions.error;
+        }
+
+        setSupportsDeliveryOptions(false);
+
+        const fallbackCustomerQuery = await supabase
+          .from('customers')
+          .select('id, name, phone, apartment_id, block, floor, flat_no, address, status')
+          .order('created_at', { ascending: false });
+
+        if (fallbackCustomerQuery.error) throw fallbackCustomerQuery.error;
+        customersData = fallbackCustomerQuery.data;
+      } else {
+        setSupportsDeliveryOptions(true);
+        customersData = customerQueryWithDeliveryOptions.data;
+      }
 
       const { data: subscriptionsData, error: subscriptionsError } = await supabase
         .from('subscriptions')
@@ -173,14 +211,29 @@ export default function Customers() {
       return;
     }
 
-    if (formData.subscription_type === 'Custom' && !formData.custom_delivery_notes.trim()) {
+    if (
+      supportsDeliveryOptions &&
+      formData.subscription_type === 'Custom' &&
+      !formData.custom_delivery_notes.trim()
+    ) {
       setFormError('Please add custom delivery notes or frequency details.');
       return;
     }
 
     setSaving(true);
 
-    const customerPayload = {
+    const customerPayload: {
+      name: string;
+      phone: string;
+      apartment_id: string;
+      block: string;
+      floor: string;
+      flat_no: string;
+      address: string;
+      status: string;
+      delivery_option?: string;
+      custom_delivery_notes?: string | null;
+    } = {
       name: trimmedName,
       phone: normalizedPhone,
       apartment_id: formData.apartment_id,
@@ -188,13 +241,16 @@ export default function Customers() {
       floor: formData.floor.trim(),
       flat_no: formData.flat_no.trim(),
       address: formData.address.trim(),
-      delivery_option: formData.subscription_type,
-      custom_delivery_notes:
-        formData.subscription_type === 'Custom'
-          ? formData.custom_delivery_notes.trim()
-          : null,
       status: 'active',
     };
+
+    if (supportsDeliveryOptions) {
+      customerPayload.delivery_option = formData.subscription_type;
+      customerPayload.custom_delivery_notes =
+        formData.subscription_type === 'Custom'
+          ? formData.custom_delivery_notes.trim()
+          : null;
+    }
 
     try {
       if (editingCustomer) {
@@ -420,6 +476,13 @@ export default function Customers() {
               {formError}
             </div>
           )}
+          {!supportsDeliveryOptions && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Advanced delivery schedule fields are unavailable because your database is
+              missing the latest customer delivery columns. Customers can still be added
+              with the default daily schedule.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Name"
@@ -495,40 +558,44 @@ export default function Customers() {
             />
           </div>
 
-          <Select
-            label="Subscription Type"
-            options={[
-              { value: 'Daily', label: 'Daily' },
-              { value: 'Alternate Days', label: 'Alternate Days' },
-              { value: 'Weekly', label: 'Weekly' },
-              { value: 'Custom', label: 'Custom' },
-            ]}
-            value={formData.subscription_type}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                subscription_type: e.target.value,
-                custom_delivery_notes:
-                  e.target.value === 'Custom' ? formData.custom_delivery_notes : '',
-              })
-            }
-          />
-
-          {formData.subscription_type === 'Custom' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Custom Delivery Notes / Frequency Details
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Example: Deliver only Mon, Wed, Fri. Pause during travel dates."
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={formData.custom_delivery_notes}
+          {supportsDeliveryOptions && (
+            <>
+              <Select
+                label="Subscription Type"
+                options={[
+                  { value: 'Daily', label: 'Daily' },
+                  { value: 'Alternate Days', label: 'Alternate Days' },
+                  { value: 'Weekly', label: 'Weekly' },
+                  { value: 'Custom', label: 'Custom' },
+                ]}
+                value={formData.subscription_type}
                 onChange={(e) =>
-                  setFormData({ ...formData, custom_delivery_notes: e.target.value })
+                  setFormData({
+                    ...formData,
+                    subscription_type: e.target.value,
+                    custom_delivery_notes:
+                      e.target.value === 'Custom' ? formData.custom_delivery_notes : '',
+                  })
                 }
               />
-            </div>
+
+              {formData.subscription_type === 'Custom' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Custom Delivery Notes / Frequency Details
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Example: Deliver only Mon, Wed, Fri. Pause during travel dates."
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={formData.custom_delivery_notes}
+                    onChange={(e) =>
+                      setFormData({ ...formData, custom_delivery_notes: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+            </>
           )}
 
           <div className="flex gap-3 justify-end pt-4">
